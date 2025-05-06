@@ -6,6 +6,7 @@
 claude_config.json
 standard_claude_config.json
 *config.json
+!claude_config.json.example
 *.bak
 config/local.json
 **/config/local.json
@@ -104,6 +105,7 @@ IMPLEMENTATION_NOTES.md
 *.bat
 !setup.bat
 !install.bat
+!run_sql_mcp.bat
 
 # Temporary files
 tmp/
