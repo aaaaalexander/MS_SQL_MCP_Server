@@ -1,6 +1,6 @@
-# SQL MCP Server
+# Microsoft SQL MCP Server
 
-SQL MCP Server is a tool that enables large language models (LLMs) to interact with SQL Server databases through a standardized API. It provides a structured way for AI systems to query, analyze, and explore database structures using natural language.
+A robust SQL Server interface using the Model Context Protocol (MCP) standard, providing AI assistants with a controlled way to interact with SQL databases. This project offers tools for schema exploration, query execution, and data analysis, with safety mechanisms to prevent harmful operations.
 
 ## 🚀 Claude Desktop Integration (Primary Use Case)
 
@@ -8,8 +8,41 @@ This tool is primarily designed to work with Claude Desktop, allowing Claude to 
 
 ### Claude Desktop Setup
 
-1. Install Claude Desktop from [Anthropic](https://www.anthropic.com/)
-2. **Create a configuration file**:
+1. **Install Prerequisites**:
+   - Python 3.8+ and SQL Server (2016+ recommended)
+   - [Microsoft ODBC Driver for SQL Server](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) (17+ recommended)
+
+2. **Create a Dedicated SQL User (Recommended)**:
+   - Create a dedicated SQL Server user with read-only permissions
+   - Never use sa/admin accounts or grant administrative privileges
+   - Ensure the user has SELECT permissions on required tables
+   - Restrict access to only necessary schemas
+   - Example SQL for creating a dedicated user:
+     ```sql
+     -- Create login
+     CREATE LOGIN SQLMCP WITH PASSWORD = 'YourStrongPassword';
+     
+     -- Switch to your database
+     USE YourDatabaseName;
+     
+     -- Create user and grant permissions
+     CREATE USER SQLMCP FOR LOGIN SQLMCP;
+     GRANT SELECT TO SQLMCP;
+     
+     -- Optionally restrict to specific schemas
+     GRANT SELECT ON SCHEMA::dbo TO SQLMCP;
+     ```
+
+3. **Install This Repository**:
+   ```bash
+   git clone https://github.com/aaaaalexander/MS_SQL_MCP_server.git
+   cd MS_SQL_MCP_server
+   python -m venv .venv
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+4. **Create Configuration File**:
    - Create a file named `claude_config.json` in your Claude Desktop configuration folder
    - Use the structure below, replacing paths and credentials with your actual values:
 
@@ -34,14 +67,14 @@ This tool is primarily designed to work with Claude Desktop, allowing Claude to 
 }
 ```
 
-3. **Important configuration notes**:
-   - Make sure to use absolute paths for both the Python executable and the script
+5. **Important Configuration Notes**:
+   - Use absolute paths for both the Python executable and the script
    - Use escaped backslashes (`\\`) for Windows network paths
-   - Ensure the user has appropriate SQL Server permissions
+   - Ensure proper SQL Server authentication details
    - Adjust `DB_ALLOWED_SCHEMAS` to restrict access to specific database schemas
 
-4. Restart Claude Desktop to apply the changes
-5. Claude will now have access to all the SQL Server tools provided by this server
+6. Restart Claude Desktop to apply the changes
+7. Claude will now have access to all the SQL Server tools provided by this server
 
 ### Using the SQL Tools in Claude
 
@@ -87,14 +120,44 @@ DB_PASSWORD=your_password
 DB_ALLOWED_SCHEMAS=["dbo"]
 ```
 
-## API Documentation
+### Environment Variables Reference
 
-The SQL MCP Server implements tools for database interaction including:
+The server supports three variable prefix formats for backward compatibility:
 
-- **Schema exploration**: View tables, columns, relationships, and metadata
-- **Query execution**: Run SQL SELECT queries with sanitization and validation
-- **Data analysis**: Generate statistics, summaries, and explore data patterns
-- **Advanced tooling**: Table relationship mapping, query building, and data export
+- **DB_** - The recommended standard prefix (e.g., `DB_SERVER`)  
+- **SQLMCP_** - Transitional prefix (e.g., `SQLMCP_DB_SERVER`)  
+- **DB_USER_** - Legacy prefix (e.g., `DB_USER_DB_SERVER`)
+
+If multiple prefixes are defined for the same setting, the priority order is:
+1. `DB_` (highest priority)
+2. `SQLMCP_` (medium priority)
+3. `DB_USER_` (lowest priority)
+
+## Available Tools
+
+### Schema Tools
+- `list_tables`: List tables/views in allowed schemas
+- `get_table_schema`: Get schema (columns, FKs) for a table
+- `list_schemas`: List all available schemas
+- `find_foreign_keys`: Find foreign key relationships
+- `search_schema_objects`: Search for database objects by name
+- `find_related_tables`: Find tables related to a specific table
+- `get_query_examples`: Generate example queries for a table
+
+### Query Tools
+- `execute_select`: Execute a safe SELECT query with parameters
+- `query_table`: Query tables with simplified filtering and sorting
+- `get_sample_data`: Retrieve sample data from tables
+
+### Analysis Tools
+- `analyze_table_data`: Analyze column distributions and statistics
+- `find_duplicate_records`: Find potential duplicate records
+- `summarize_data`: Generate data summaries with grouping and metrics
+
+### Metadata Tools
+- `get_database_info`: Get server and database information
+- `list_stored_procedures`: List available stored procedures
+- `get_procedure_definition`: Get stored procedure code and parameters
 
 ## Security Considerations
 
@@ -102,10 +165,21 @@ The SQL MCP Server implements tools for database interaction including:
 - Read-only mode prevents data modification by default
 - Schema restrictions limit access to specified database objects
 - Connection pooling with timeout limits helps prevent resource exhaustion
+- **Create a dedicated SQL user** with read-only permissions specifically for this service
+- **Never run as sa/admin** or with administrative database privileges
+- **Keep credentials secure** and never commit them to version control
+- **Run behind a firewall** to prevent public exposure of the MCP endpoint
 
 ## Troubleshooting
 
 For connection issues or configuration help, refer to the `sql_connection_help.md` file.
+
+Common issues to check:
+- Verify SQL Server is running and accessible
+- Check firewall settings for port 1433 (default SQL Server port)
+- Confirm credentials are correct in your configuration
+- Ensure the SQL user has appropriate permissions on the tables/schemas
+- Verify the ODBC driver is properly installed
 
 ## License
 
