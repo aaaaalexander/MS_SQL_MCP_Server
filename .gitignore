@@ -1,0 +1,119 @@
+﻿# Environment and configuration
+.env
+*.env
+.env.*
+!.env.example
+claude_config.json
+standard_claude_config.json
+*config.json
+*.bak
+config/local.json
+**/config/local.json
+**/*personal*
+**/personal*
+
+# Database and credentials
+**/credentials/*
+**/secrets/*
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+**/data/digest/*
+**/data/user/*
+
+# Development environments
+.venv
+/.venv/
+./.venv
+.venv/
+venv/
+env/
+.idea/
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.class
+**/*.py[cod]
+
+# Backup files
+**/backup/
+**/*backup*
+*.old
+*.orig
+
+# Debug/log files
+*.log
+**/logs/
+debug_*
+*debug*.*
+proxy.log
+log.txt
+**/log/
+**/logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+**/*.egg-info/
+
+# Credentials
+*credential*
+*secret*
+*.pem
+*.key
+*.p12
+*.pfx
+*.password.txt
+*password*
+*token*
+*api_key*
+*apikey*
+**/keys/
+**/tokens/
+
+# Test files
+test_*.py
+test_*.bat
+tests/
+**/tests/
+
+# Documentation files (excluding essential ones)
+ADAPTER_FIX.md
+BASIC_TOOLS_*.md
+CLAUDE_CONFIG_CHANGES.md
+DEPENDENCY_RESOLUTION_PLAN.md
+DIGEST_TOOL_INTEGRATION.md
+MIGRATION_PLAN.md
+NOVICE_TOOLS_*.md
+OPTIMIZATION_RECOMMENDATIONS.md
+REFACTORING_PLAN.md
+REPOSITORY_RENAME_SUMMARY.md
+SCHEMA_ADAPTER_IMPLEMENTATION.md
+SQL_TOOLS_INTEGRATION.md
+TERMINOLOGY_CHANGE_*.md
+TOOL_REGISTRATION_FIX_SUMMARY.md
+WORK_SUMMARY.md
+CLEANUP_*.md
+IMPLEMENTATION_NOTES.md
+
+# Batch files
+*.bat
+!setup.bat
+!install.bat
+
+# Temporary files
+tmp/
+temp/
+**/tmp/
+**/temp/
+*.tmp
+*.temp
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
