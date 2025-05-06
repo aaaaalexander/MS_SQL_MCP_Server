@@ -133,31 +133,63 @@ If multiple prefixes are defined for the same setting, the priority order is:
 2. `SQLMCP_` (medium priority)
 3. `DB_USER_` (lowest priority)
 
-## Available Tools
+## 🛠️ Database Toolkit: Available Tools
 
-### Schema Tools
-- `list_tables`: List tables/views in allowed schemas
-- `get_table_schema`: Get schema (columns, FKs) for a table
-- `list_schemas`: List all available schemas
-- `find_foreign_keys`: Find foreign key relationships
-- `search_schema_objects`: Search for database objects by name
-- `find_related_tables`: Find tables related to a specific table
-- `get_query_examples`: Generate example queries for a table
+### 🔍 Schema Explorer Tools
+Discover and navigate your database structure with ease!
 
-### Query Tools
-- `execute_select`: Execute a safe SELECT query with parameters
-- `query_table`: Query tables with simplified filtering and sorting
-- `get_sample_data`: Retrieve sample data from tables
+- **`list_schemas`** - 🗂️ Get a comprehensive overview of all available database schemas - your roadmap to the database world!
+  
+- **`list_tables`** - 📋 Uncover all tables and views in your schemas - see what treasures your database holds!
+  
+- **`get_table_schema`** - 📊 Deep-dive into a table's anatomy - columns, data types, keys, and constraints all revealed!
+  
+- **`search_schema_objects`** - 🔎 Find any database object in seconds - like Ctrl+F for your entire database!
+  
+- **`get_query_examples`** - ✨ Auto-generate sample queries for any table - perfect for learning or quick starts!
 
-### Analysis Tools
-- `analyze_table_data`: Analyze column distributions and statistics
-- `find_duplicate_records`: Find potential duplicate records
-- `summarize_data`: Generate data summaries with grouping and metrics
+### 🔗 Relationship Navigator Tools
+Understand how your data connects across the database!
 
-### Metadata Tools
-- `get_database_info`: Get server and database information
-- `list_stored_procedures`: List available stored procedures
-- `get_procedure_definition`: Get stored procedure code and parameters
+- **`find_foreign_keys`** - 🔑 Discover all relationships for a table - see how tables are linked together!
+  
+- **`find_related_tables`** - 🌐 Map the neighborhood of any table - see all connected entities at a glance!
+  
+- **`find_related_tables_advanced`** - 🚀 Get advanced relationship insights with sample joins and visualization support!
+
+### 📝 Query Execution Tools
+Run powerful queries with built-in safety!
+
+- **`execute_select`** - ⚡ Execute SQL queries with secure parameter binding - safe, fast, and reliable!
+  
+- **`query_table`** - 🎯 Query tables without writing SQL - perfect for simple filters and sorting!
+  
+- **`get_sample_data`** - 👀 Preview table contents instantly - see actual data examples with zero effort!
+
+### 📊 Data Analysis Tools
+Extract meaningful insights from your data!
+
+- **`analyze_table_data`** - 📈 Get statistical breakdowns of your data - distributions, patterns, and anomalies revealed!
+  
+- **`find_duplicate_records`** - 🔄 Identify potential duplicate records - clean data leads to better insights!
+  
+- **`summarize_data`** - 📌 Generate powerful summaries with grouping - aggregate, count, average, and more!
+  
+- **`analyze_table_data_advanced`** - 🧪 Get comprehensive data analysis with samples and visualizations - for the data scientists!
+
+### 🔬 Metadata Tools
+Discover the hidden details of your database!
+
+- **`get_database_info`** - 🏢 Get vital statistics about your SQL Server and database - version, configuration, and more!
+  
+- **`list_stored_procedures`** - 📜 Find all available stored procedures - discover powerful database routines!
+  
+- **`get_procedure_definition`** - 📝 See the actual code inside stored procedures - perfect for understanding complex logic!
+
+### 📦 Export Tools
+Share and utilize your data beyond the database!
+
+- **`export_data`** - 💾 Export query results to various formats - CSV, JSON, Excel and more!
 
 ## Security Considerations
 
