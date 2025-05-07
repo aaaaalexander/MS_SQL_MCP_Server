@@ -6,7 +6,8 @@ basic list_tables and get_table_schema functionality.
 """
 import logging
 import asyncio
-from typing import Dict, List, Any, Optional
+import re
+from typing import Dict, List, Any, Optional, Tuple
 import time
 
 # Configure logging
@@ -24,6 +25,40 @@ mcp = None
 _get_db_connection_blocking = None
 _execute_query_blocking = None
 ALLOWED_SCHEMAS = ["dbo"]
+
+# SQL Server version information
+SQL_SERVER_VERSION = None
+HAS_STRING_SPLIT = False
+
+async def detect_sql_server_version():
+    """Detect the SQL Server version and determine feature availability."""
+    global SQL_SERVER_VERSION, HAS_STRING_SPLIT
+    
+    try:
+        version_query = "SELECT @@VERSION AS version, SERVERPROPERTY('ProductVersion') AS product_version"
+        version_result = await asyncio.to_thread(_execute_query_blocking, version_query)
+        
+        if version_result:
+            SQL_SERVER_VERSION = version_result[0]
+            
+            # Check if STRING_SPLIT is available (SQL Server 2016+)
+            # Extract major version from product_version (e.g., "15.0.4153.1" -> 15)
+            version_string = str(SQL_SERVER_VERSION.get('product_version', ''))
+            major_version = int(version_string.split('.')[0]) if version_string and '.' in version_string else 0
+            
+            # SQL Server 2016 is version 13.0
+            HAS_STRING_SPLIT = major_version >= 13
+            
+            logger.info(f"Detected SQL Server version: {version_string}, STRING_SPLIT available: {HAS_STRING_SPLIT}")
+        else:
+            logger.warning("Could not detect SQL Server version, assuming STRING_SPLIT is not available")
+            SQL_SERVER_VERSION = {'version': 'Unknown', 'product_version': 'Unknown'}
+            HAS_STRING_SPLIT = False
+    
+    except Exception as e:
+        logger.error(f"Error detecting SQL Server version: {e}")
+        SQL_SERVER_VERSION = {'version': 'Unknown', 'product_version': 'Unknown'}
+        HAS_STRING_SPLIT = False
 
 def register_tools(mcp_instance, db_connection=None, db_connection_blocking=None, 
                   execute_query_blocking=None, allowed_schemas=None):
@@ -43,6 +78,12 @@ def register_tools(mcp_instance, db_connection=None, db_connection_blocking=None
     mcp.add_tool(search_schema_objects)
     mcp.add_tool(find_related_tables)
     mcp.add_tool(get_query_examples)
+    
+    # Detect SQL Server version synchronously to avoid event loop issues
+    # We'll just set defaults for now and let the functions detect version as needed
+    global SQL_SERVER_VERSION, HAS_STRING_SPLIT
+    SQL_SERVER_VERSION = {'version': 'Unknown', 'product_version': 'Unknown'}
+    HAS_STRING_SPLIT = False
     
     logger.info("Registered extended schema tools with MCP instance")
     return True
@@ -151,6 +192,28 @@ async def get_sample_data(table_name: str, limit: int = 5) -> Dict[str, Any]:
             "details": str(e)
         }
 
+def build_schema_filter_query(schema_list: List[str]) -> str:
+    """
+    Build a SQL condition to filter by allowed schemas in a backward-compatible way.
+    
+    Args:
+        schema_list: List of schema names to include
+        
+    Returns:
+        SQL WHERE condition for schema filtering
+    """
+    # The most compatible way is to use IN with hardcoded values
+    if not schema_list:
+        return "1=1"  # No filtering
+    
+    schema_conditions = []
+    for schema in schema_list:
+        # Properly escape any single quotes in schema names
+        safe_schema = schema.replace("'", "''")
+        schema_conditions.append(f"'{safe_schema}'")
+    
+    return f"schema_name IN ({', '.join(schema_conditions)})"
+
 async def search_schema_objects(
     search_term: str,
     object_types: Optional[List[str]] = None
@@ -178,57 +241,60 @@ async def search_schema_objects(
     }
     
     try:
+        # Get allowed schemas using existing list
+        allowed_schemas_condition = "TABLE_SCHEMA IN (" + ", ".join([f"'{schema}'" for schema in ALLOWED_SCHEMAS]) + ")"
+        
         # Search for tables
         if 'TABLE' in object_types:
-            table_query = """
+            table_query = f"""
             SELECT t.TABLE_SCHEMA, t.TABLE_NAME, 'TABLE' as OBJECT_TYPE
             FROM INFORMATION_SCHEMA.TABLES t
             WHERE t.TABLE_TYPE = 'BASE TABLE' 
             AND (t.TABLE_NAME LIKE ? OR t.TABLE_SCHEMA LIKE ?)
-            AND t.TABLE_SCHEMA IN (SELECT value FROM STRING_SPLIT(?, ','))
+            AND {allowed_schemas_condition}
             ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME
             """
             
             tables = await asyncio.to_thread(
                 _execute_query_blocking,
                 table_query, 
-                (f'%{search_term}%', f'%{search_term}%', ','.join(ALLOWED_SCHEMAS))
+                (f'%{search_term}%', f'%{search_term}%')
             )
             search_results['tables'] = tables
         
         # Search for views
         if 'VIEW' in object_types:
-            view_query = """
+            view_query = f"""
             SELECT t.TABLE_SCHEMA, t.TABLE_NAME, 'VIEW' as OBJECT_TYPE
             FROM INFORMATION_SCHEMA.TABLES t
             WHERE t.TABLE_TYPE = 'VIEW' 
             AND (t.TABLE_NAME LIKE ? OR t.TABLE_SCHEMA LIKE ?)
-            AND t.TABLE_SCHEMA IN (SELECT value FROM STRING_SPLIT(?, ','))
+            AND {allowed_schemas_condition}
             ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME
             """
             
             views = await asyncio.to_thread(
                 _execute_query_blocking,
                 view_query, 
-                (f'%{search_term}%', f'%{search_term}%', ','.join(ALLOWED_SCHEMAS))
+                (f'%{search_term}%', f'%{search_term}%')
             )
             search_results['views'] = views
         
         # Search for columns
         if 'COLUMN' in object_types:
-            column_query = """
+            column_query = f"""
             SELECT c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME, 
                 c.DATA_TYPE, 'COLUMN' as OBJECT_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS c
             WHERE c.COLUMN_NAME LIKE ?
-            AND c.TABLE_SCHEMA IN (SELECT value FROM STRING_SPLIT(?, ','))
+            AND {allowed_schemas_condition}
             ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION
             """
             
             columns = await asyncio.to_thread(
                 _execute_query_blocking,
                 column_query,
-                (f'%{search_term}%', ','.join(ALLOWED_SCHEMAS))
+                (f'%{search_term}%')
             )
             search_results['columns'] = columns
         
@@ -239,7 +305,8 @@ async def search_schema_objects(
         return {
             'search_term': search_term,
             'results': search_results,
-            'total_matches': total_matches
+            'total_matches': total_matches,
+            'server_version': SQL_SERVER_VERSION.get('product_version', 'Unknown') if SQL_SERVER_VERSION else 'Unknown'
         }
     
     except Exception as e:

@@ -92,8 +92,8 @@ async def query_table(
     if sort_by:
         order_clause = f" ORDER BY [{sort_by}] {sort_order}"
     
-    # Build the full query
-    query = f"SELECT TOP {limit} {select_clause} FROM [{schema_name}].[{table_name_only}]{where_clause}{order_clause}"
+    # Build the full query with proper TOP syntax
+    query = f"SELECT TOP ({limit}) {select_clause} FROM [{schema_name}].[{table_name_only}]{where_clause}{order_clause}"
     
     try:
         # Execute the query

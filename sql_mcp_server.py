@@ -34,11 +34,21 @@ except ImportError as e:
     logger.error("Please ensure 'mcp' package (modelcontextprotocol-server) is installed correctly.")
     sys.exit(1)
 
+# Load environment variables from .env file directly
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configuration Loading - Priority order: DB_ (standard), SQLMCP_ (transitional), DB_USER_ (legacy)
 DB_SERVER = os.environ.get("DB_SERVER", os.environ.get("SQLMCP_DB_SERVER", os.environ.get("DB_USER_DB_SERVER", "localhost")))
 DB_NAME = os.environ.get("DB_NAME", os.environ.get("SQLMCP_DB_NAME", os.environ.get("DB_USER_DB_NAME", "database")))
 DB_USERNAME = os.environ.get("DB_USERNAME", os.environ.get("SQLMCP_DB_USERNAME", os.environ.get("DB_USER_DB_USERNAME", "")))
 DB_PASSWORD = os.environ.get("DB_PASSWORD", os.environ.get("SQLMCP_DB_PASSWORD", os.environ.get("DB_USER_DB_PASSWORD", "")))
+
+# Log the configuration for debugging
+logger.info(f"Configured DB_SERVER: {DB_SERVER}")
+logger.info(f"Configured DB_NAME: {DB_NAME}")
+logger.info(f"Configured DB_USERNAME: {DB_USERNAME}")
+logger.info(f"Configured DB_PASSWORD: {'*' * 10}")
 
 # Log which prefix was actually used (helps with debugging)
 if os.environ.get("DB_SERVER"):
@@ -400,8 +410,15 @@ if __name__ == "__main__":
     else:
         logger.info("All basic tools are registered successfully!")
     
-    # Run the server
+    # Get host and port
+    HOST = os.environ.get("DB_HOST", "127.0.0.1")
+    PORT = int(os.environ.get("DB_PORT", "8000"))
+    
+    logger.info(f"Server should be running on {HOST}:{PORT}")
+    
+    # Run the server using the standard FastMCP run method
     try:
+        logger.info("Starting FastMCP server...")
         mcp.run()
     except Exception as e:
          logger.error(f"FATAL: Error running FastMCP server: {e}")

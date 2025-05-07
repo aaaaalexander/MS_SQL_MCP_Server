@@ -8,6 +8,7 @@ import logging
 import asyncio
 from typing import Dict, List, Any, Optional
 import time
+import math
 
 # Configure logging
 logger = logging.getLogger("DB_USER_Analyze")
@@ -124,136 +125,194 @@ async def analyze_table_data(
             # Get sample limit clause
             sample_clause = f"TOP {sample_size}" if sample_size > 0 else ""
             
-            # Analyze null values
-            null_query = f"""
-            SELECT COUNT(*) AS null_count
-            FROM (
-                SELECT {sample_clause} *
-                FROM [{schema_name}].[{table_name_only}]
-                {f"ORDER BY NEWID()" if sample_size > 0 else ""}
-            ) AS sample_data
-            WHERE [{column_name}] IS NULL
+            # Use a more robust approach for getting sample data
+            sample_query = f"""
+            SELECT {sample_clause} [{column_name}]
+            FROM [{schema_name}].[{table_name_only}]
+            {f"ORDER BY NEWID()" if sample_size > 0 else ""}
             """
             
-            null_result = await asyncio.to_thread(_execute_query_blocking, null_query)
-            null_count = null_result[0]['null_count'] if null_result else 0
-            
-            # Initialize column analysis
-            column_analysis = {
-                "data_type": data_type,
-                "null_count": null_count,
-                "null_percentage": round((null_count / min(sample_size, total_rows) * 100), 2) if total_rows > 0 else 0
-            }
-            
-            # Analyze distinct values
-            distinct_query = f"""
-            SELECT COUNT(DISTINCT [{column_name}]) AS distinct_count
-            FROM (
-                SELECT {sample_clause} *
-                FROM [{schema_name}].[{table_name_only}]
-                {f"ORDER BY NEWID()" if sample_size > 0 else ""}
-            ) AS sample_data
-            """
-            
-            distinct_result = await asyncio.to_thread(_execute_query_blocking, distinct_query)
-            distinct_count = distinct_result[0]['distinct_count'] if distinct_result else 0
-            
-            column_analysis["distinct_values"] = distinct_count
-            
-            # Get frequency distribution for top values (non-numeric types)
-            if data_type.lower() in ('char', 'varchar', 'nchar', 'nvarchar', 'text', 'ntext'):
-                frequency_query = f"""
-                SELECT TOP 10 [{column_name}] AS value, COUNT(*) AS frequency
-                FROM (
-                    SELECT {sample_clause} *
-                    FROM [{schema_name}].[{table_name_only}]
-                    {f"ORDER BY NEWID()" if sample_size > 0 else ""}
-                ) AS sample_data
-                WHERE [{column_name}] IS NOT NULL
-                GROUP BY [{column_name}]
-                ORDER BY COUNT(*) DESC
-                """
+            try:
+                sample_data = await asyncio.to_thread(_execute_query_blocking, sample_query)
                 
-                frequency_result = await asyncio.to_thread(_execute_query_blocking, frequency_query)
+                # Count null values
+                null_count = sum(1 for row in sample_data if row[column_name] is None)
                 
-                column_analysis["top_values"] = [{
-                    "value": str(row['value']),
-                    "frequency": row['frequency'],
-                    "percentage": round((row['frequency'] / (min(sample_size, total_rows) - null_count) * 100), 2) if (min(sample_size, total_rows) - null_count) > 0 else 0
-                } for row in frequency_result]
+                # Initialize column analysis
+                column_analysis = {
+                    "data_type": data_type,
+                    "null_count": null_count
+                }
                 
-                # Get length statistics for string columns
-                length_query = f"""
-                SELECT 
-                    MIN(LEN([{column_name}])) AS min_length,
-                    MAX(LEN([{column_name}])) AS max_length,
-                    AVG(CAST(LEN([{column_name}]) AS FLOAT)) AS avg_length
-                FROM (
-                    SELECT {sample_clause} *
-                    FROM [{schema_name}].[{table_name_only}]
-                    {f"ORDER BY NEWID()" if sample_size > 0 else ""}
-                ) AS sample_data
-                WHERE [{column_name}] IS NOT NULL
-                """
+                # Calculate null percentage safely
+                analyzed_rows = len(sample_data)
+                if analyzed_rows > 0:
+                    column_analysis["null_percentage"] = round((null_count / analyzed_rows * 100), 2)
+                else:
+                    column_analysis["null_percentage"] = 0
                 
-                length_result = await asyncio.to_thread(_execute_query_blocking, length_query)
+                # Count distinct values (without using SQL which might overflow)
+                non_null_values = [row[column_name] for row in sample_data if row[column_name] is not None]
+                distinct_values = set()
+                for val in non_null_values:
+                    # Convert to string to handle any type
+                    if val is not None:
+                        try:
+                            distinct_values.add(str(val))
+                        except:
+                            # Skip values that can't be converted to string
+                            pass
                 
-                if length_result:
-                    column_analysis["length_stats"] = {
-                        "min": length_result[0]['min_length'],
-                        "max": length_result[0]['max_length'],
-                        "avg": round(length_result[0]['avg_length'], 2)
-                    }
-            
-            # Get numeric statistics (numeric types)
-            elif data_type.lower() in ('tinyint', 'smallint', 'int', 'bigint', 'decimal', 'numeric', 'float', 'real', 'money', 'smallmoney'):
-                stats_query = f"""
-                SELECT 
-                    MIN([{column_name}]) AS min_value,
-                    MAX([{column_name}]) AS max_value,
-                    AVG(CAST([{column_name}] AS FLOAT)) AS avg_value,
-                    SUM([{column_name}]) AS sum_value
-                FROM (
-                    SELECT {sample_clause} *
-                    FROM [{schema_name}].[{table_name_only}]
-                    {f"ORDER BY NEWID()" if sample_size > 0 else ""}
-                ) AS sample_data
-                WHERE [{column_name}] IS NOT NULL
-                """
+                column_analysis["distinct_values"] = len(distinct_values)
                 
-                stats_result = await asyncio.to_thread(_execute_query_blocking, stats_query)
+                # Analyze based on data type
+                if data_type.lower() in ('char', 'varchar', 'nchar', 'nvarchar', 'text', 'ntext'):
+                    # Text analysis
+                    try:
+                        # Frequency distribution for string values
+                        value_counts = {}
+                        for val in non_null_values:
+                            str_val = str(val)
+                            if str_val in value_counts:
+                                value_counts[str_val] += 1
+                            else:
+                                value_counts[str_val] = 1
+                        
+                        # Sort by frequency and get top 10
+                        top_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+                        
+                        column_analysis["top_values"] = [{
+                            "value": value,
+                            "frequency": count,
+                            "percentage": round((count / len(non_null_values) * 100), 2) if non_null_values else 0
+                        } for value, count in top_values]
+                        
+                        # Length statistics
+                        if non_null_values:
+                            lengths = [len(str(val)) for val in non_null_values if val is not None]
+                            if lengths:
+                                column_analysis["length_stats"] = {
+                                    "min": min(lengths),
+                                    "max": max(lengths),
+                                    "avg": round(sum(lengths) / len(lengths), 2)
+                                }
+                    except Exception as e:
+                        logger.warning(f"Error analyzing text column {column_name}: {e}")
                 
-                if stats_result:
-                    column_analysis["numeric_stats"] = {
-                        "min": stats_result[0]['min_value'],
-                        "max": stats_result[0]['max_value'],
-                        "avg": round(stats_result[0]['avg_value'], 2) if stats_result[0]['avg_value'] is not None else None,
-                        "sum": stats_result[0]['sum_value']
-                    }
-            
-            # Get date statistics (date types)
-            elif data_type.lower() in ('date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset'):
-                date_stats_query = f"""
-                SELECT 
-                    MIN([{column_name}]) AS min_date,
-                    MAX([{column_name}]) AS max_date,
-                    DATEDIFF(day, MIN([{column_name}]), MAX([{column_name}])) AS date_range_days
-                FROM (
-                    SELECT {sample_clause} *
-                    FROM [{schema_name}].[{table_name_only}]
-                    {f"ORDER BY NEWID()" if sample_size > 0 else ""}
-                ) AS sample_data
-                WHERE [{column_name}] IS NOT NULL
-                """
+                elif data_type.lower() in ('tinyint', 'smallint', 'int', 'bigint', 'decimal', 'numeric', 'float', 'real', 'money', 'smallmoney'):
+                    # Numeric analysis
+                    try:
+                        # Convert to float for calculations to avoid overflow
+                        numeric_values = []
+                        for val in non_null_values:
+                            try:
+                                numeric_values.append(float(val))
+                            except (ValueError, TypeError):
+                                # Skip values that can't be converted to float
+                                pass
+                        
+                        if numeric_values:
+                            column_analysis["numeric_stats"] = {
+                                "min": min(numeric_values),
+                                "max": max(numeric_values),
+                                "avg": round(sum(numeric_values) / len(numeric_values), 2),
+                                # Use safe sum calculation
+                                "sum": round(sum(numeric_values), 2)
+                            }
+                    except Exception as e:
+                        logger.warning(f"Error analyzing numeric column {column_name}: {e}")
+                        # Provide a fallback using SQL but with DECIMAL casting to avoid overflow
+                        try:
+                            safe_stats_query = f"""
+                            SELECT 
+                                MIN(CAST([{column_name}] AS DECIMAL(38,4))) AS min_value,
+                                MAX(CAST([{column_name}] AS DECIMAL(38,4))) AS max_value,
+                                AVG(CAST(CAST(CAST([{column_name}] AS DECIMAL(38,4))) AS avg_value
+                            FROM (
+                                SELECT {sample_clause} *
+                                FROM [{schema_name}].[{table_name_only}]
+                                {f"ORDER BY NEWID()" if sample_size > 0 else ""}
+                            ) AS sample_data
+                            WHERE [{column_name}] IS NOT NULL
+                            """
+                            
+                            safe_stats_result = await asyncio.to_thread(_execute_query_blocking, safe_stats_query)
+                            
+                            if safe_stats_result:
+                                column_analysis["numeric_stats"] = {
+                                    "min": safe_stats_result[0]['min_value'],
+                                    "max": safe_stats_result[0]['max_value'],
+                                    "avg": round(safe_stats_result[0]['avg_value'], 2) if safe_stats_result[0]['avg_value'] is not None else None,
+                                    # Sum not included due to potential overflow
+                                }
+                        except Exception as e2:
+                            logger.error(f"Error in fallback numeric analysis for {column_name}: {e2}")
+                            column_analysis["numeric_stats"] = {
+                                "error": "Could not calculate numeric statistics due to potential overflow or data type issues"
+                            }
                 
-                date_stats_result = await asyncio.to_thread(_execute_query_blocking, date_stats_query)
+                elif data_type.lower() in ('date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset'):
+                    # Date analysis
+                    try:
+                        if non_null_values:
+                            # Since we already have the data, we don't need to query again
+                            date_objects = []
+                            for val in non_null_values:
+                                if hasattr(val, 'isoformat'):  # Check if it's a date object
+                                    date_objects.append(val)
+                            
+                            if date_objects:
+                                min_date = min(date_objects)
+                                max_date = max(date_objects)
+                                # Calculate date range in days safely
+                                try:
+                                    if hasattr(max_date, 'toordinal') and hasattr(min_date, 'toordinal'):
+                                        date_range_days = max_date.toordinal() - min_date.toordinal()
+                                    else:
+                                        # Fallback using total_seconds for datetime objects
+                                        date_range_days = (max_date - min_date).total_seconds() / (24*60*60)
+                                except Exception:
+                                    date_range_days = None
+                                
+                                column_analysis["date_stats"] = {
+                                    "min_date": min_date.isoformat() if hasattr(min_date, 'isoformat') else str(min_date),
+                                    "max_date": max_date.isoformat() if hasattr(max_date, 'isoformat') else str(max_date),
+                                    "date_range_days": date_range_days
+                                }
+                    except Exception as e:
+                        logger.warning(f"Error analyzing date column {column_name}: {e}")
+                        # We can try to get date statistics using SQL as fallback
+                        try:
+                            date_stats_query = f"""
+                            SELECT 
+                                MIN([{column_name}]) AS min_date,
+                                MAX([{column_name}]) AS max_date,
+                                DATEDIFF(day, MIN([{column_name}]), MAX([{column_name}])) AS date_range_days
+                            FROM (
+                                SELECT {sample_clause} *
+                                FROM [{schema_name}].[{table_name_only}]
+                                {f"ORDER BY NEWID()" if sample_size > 0 else ""}
+                            ) AS sample_data
+                            WHERE [{column_name}] IS NOT NULL
+                            """
+                            
+                            date_stats_result = await asyncio.to_thread(_execute_query_blocking, date_stats_query)
+                            
+                            if date_stats_result:
+                                column_analysis["date_stats"] = {
+                                    "min_date": date_stats_result[0]['min_date'].isoformat() if date_stats_result[0]['min_date'] else None,
+                                    "max_date": date_stats_result[0]['max_date'].isoformat() if date_stats_result[0]['max_date'] else None,
+                                    "date_range_days": date_stats_result[0]['date_range_days']
+                                }
+                        except Exception as e2:
+                            logger.error(f"Error in fallback date analysis for {column_name}: {e2}")
                 
-                if date_stats_result:
-                    column_analysis["date_stats"] = {
-                        "min_date": date_stats_result[0]['min_date'].isoformat() if date_stats_result[0]['min_date'] else None,
-                        "max_date": date_stats_result[0]['max_date'].isoformat() if date_stats_result[0]['max_date'] else None,
-                        "date_range_days": date_stats_result[0]['date_range_days']
-                    }
+            except Exception as e:
+                logger.error(f"Error analyzing column {column_name}: {e}")
+                column_analysis = {
+                    "data_type": data_type,
+                    "error": f"Failed to analyze column: {str(e)}"
+                }
             
             # Add column analysis to results
             analysis_results["column_analysis"][column_name] = column_analysis

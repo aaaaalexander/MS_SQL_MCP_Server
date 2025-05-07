@@ -20,14 +20,30 @@ _execute_query_blocking = None
 # Initialize usage_digest module
 def _init_usage_digest():
     """Initialize the usage_digest module with our connection methods"""
-    global mcp, _get_db_connection_blocking, _execute_query_blocking
-    usage_digest.register_tools(
-        mcp, 
-        get_db_connection,
-        _get_db_connection_blocking, 
-        _execute_query_blocking
-    )
-    logger.info("Successfully initialized usage_digest module")
+    global mcp, get_db_connection, _get_db_connection_blocking, _execute_query_blocking
+    
+    # Check if all required parameters are available
+    if None in [mcp, _get_db_connection_blocking, _execute_query_blocking]:
+        logger.warning("Cannot initialize usage_digest: required connections not provided")
+        return False
+    
+    # Check if usage_digest module has the register_tools function
+    if hasattr(usage_digest, 'register_tools'):
+        try:
+            usage_digest.register_tools(
+                mcp, 
+                get_db_connection,
+                _get_db_connection_blocking, 
+                _execute_query_blocking
+            )
+            logger.info("Successfully initialized usage_digest module")
+            return True
+        except Exception as e:
+            logger.error(f"Error initializing usage_digest module: {e}")
+            return False
+    else:
+        logger.warning("usage_digest module does not have register_tools function")
+        return False
 
 async def analyze_query_history(
     days_to_analyze: int = 30,
@@ -104,11 +120,61 @@ async def refresh_table_field_digest(
     """
     logger.info(f"refresh_table_field_digest adapter called with: days={days_to_analyze}, exclude_system={exclude_system_queries}, min_count={min_execution_count}")
     
-    # Map to the corresponding function in usage_digest
-    return await usage_digest.update_usage_digest(
-        days_history=days_to_analyze,
-        force_refresh=True
-    )
+    try:
+        # First try to initialize usage_digest if not already done
+        init_success = _init_usage_digest()
+        
+        if not init_success:
+            return {
+                "status": "error",
+                "message": "Failed to initialize usage_digest module",
+                "details": "Could not initialize required connections or module. Make sure the server is properly configured."
+            }
+        
+        # Check if usage_digest module is properly loaded and has necessary attributes
+        if not usage_digest:
+            return {
+                "status": "error",
+                "message": "usage_digest module is not available",
+                "details": "The usage_digest module could not be loaded or is not properly initialized."
+            }
+        
+        # Check if update_usage_digest function exists
+        if not hasattr(usage_digest, 'update_usage_digest'):
+            return {
+                "status": "error",
+                "message": "update_usage_digest function not available",
+                "details": "This is a placeholder response until all dependent tools are available"
+            }
+        
+        # Call the update_usage_digest function with proper error handling
+        try:
+            result = await usage_digest.update_usage_digest(
+                days_history=days_to_analyze,
+                force_refresh=True
+            )
+            return result
+        except AttributeError as e:
+            logger.error(f"AttributeError in update_usage_digest: {e}")
+            return {
+                "status": "error",
+                "message": f"AttributeError in update_usage_digest: {e}",
+                "details": "The update_usage_digest function is not properly implemented or has missing dependencies."
+            }
+        except TypeError as e:
+            logger.error(f"TypeError in update_usage_digest: {e}")
+            return {
+                "status": "error",
+                "message": f"TypeError in update_usage_digest: {e}",
+                "details": "The update_usage_digest function was called with incorrect types. This may be due to missing parameters or initialization issues."
+            }
+        
+    except Exception as e:
+        logger.error(f"Error in refresh_table_field_digest: {e}")
+        return {
+            "error": "Failed to update usage digest",
+            "details": str(e)
+        }
 
 async def get_table_recommendations(
     table_name: str

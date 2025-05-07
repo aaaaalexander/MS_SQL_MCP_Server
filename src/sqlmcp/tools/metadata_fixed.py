@@ -47,9 +47,9 @@ async def get_database_info() -> Dict[str, Any]:
         # Get server version and edition
         version_query = """
         SELECT 
-            SERVERPROPERTY('ProductVersion') AS product_version,
-            SERVERPROPERTY('ProductLevel') AS product_level,
-            SERVERPROPERTY('Edition') AS edition,
+            CONVERT(NVARCHAR(100), SERVERPROPERTY('ProductVersion')) AS product_version,
+            CONVERT(NVARCHAR(100), SERVERPROPERTY('ProductLevel')) AS product_level,
+            CONVERT(NVARCHAR(100), SERVERPROPERTY('Edition')) AS edition,
             SERVERPROPERTY('EngineEdition') AS engine_edition,
             SERVERPROPERTY('ServerName') AS server_name,
             DB_NAME() AS current_database
@@ -106,9 +106,11 @@ async def get_database_info() -> Dict[str, Any]:
             files_query
         )
         
-        # Get database options
+        # Get database options - using simpler query to avoid ODBC SQL type -16 issues
         options_query = """
-        SELECT name, value, value_in_use
+        SELECT name, 
+               CAST(value AS VARCHAR(100)) AS value, 
+               CAST(value_in_use AS VARCHAR(100)) AS value_in_use
         FROM sys.configurations
         WHERE name IN (
             'max server memory (MB)', 
@@ -142,6 +144,18 @@ async def get_database_info() -> Dict[str, Any]:
         return result
     
     except Exception as e:
+        # Handle XML type error
+        if "ODBC SQL type" in str(e) and "-16" in str(e):
+            logger.warning(f"XML type conversion error in get_database_info: {e}")
+            # Return simplified info without the XML parts
+            result = {
+                "server": DB_SERVER,
+                "database": DB_NAME,
+                "version": "Unknown (XML type error)",
+                "edition": "Unknown (XML type error)"
+            }
+            return result
+
         logger.error(f"Error in get_database_info: {e}")
         return {
             "error": "Failed to retrieve database information",
