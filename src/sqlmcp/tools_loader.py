@@ -10,6 +10,7 @@ import importlib
 import sys
 import os
 import traceback
+import asyncio
 from typing import Any
 
 logger = logging.getLogger("DB_USER_ToolsLoader")
@@ -207,3 +208,46 @@ def list_registered_tools(mcp: Any) -> list:
     except Exception as e:
         logger.error(f"Error listing tools: {e}")
         return []
+
+
+async def initialize_table_field_digest():
+    """
+    Initialize the table field digest by refreshing it during server startup.
+    This function is called automatically when the MCP server starts.
+    """
+    logger.info("Initializing table field digest...")
+    try:
+        # Import the digest module
+        from src.sqlmcp.tools import digest
+        
+        # Ensure it's properly initialized
+        if hasattr(digest, 'refresh_table_field_digest') and callable(digest.refresh_table_field_digest):
+            # Run the refresh with default parameters
+            result = await digest.refresh_table_field_digest(
+                days_to_analyze=30,
+                exclude_system_queries=True,
+                min_execution_count=5
+            )
+            
+            if result.get("status") == "success":
+                logger.info(f"Table field digest initialized successfully. {result.get('tables_analyzed', 0)} tables analyzed.")
+            else:
+                logger.warning(f"Table field digest initialization returned: {result.get('message', 'unknown status')}")
+        else:
+            logger.warning("Table field digest initialization skipped: refresh_table_field_digest function not available")
+    except Exception as e:
+        logger.error(f"Error initializing table field digest: {e}")
+        logger.error(traceback.format_exc())
+        # Continue with server startup despite digest initialization failure
+        
+
+def run_digest_initialization():
+    """
+    Run the digest initialization in an async context.
+    This function is called from the main server file.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(initialize_table_field_digest())
+    except Exception as e:
+        logger.error(f"Failed to run digest initialization: {e}")

@@ -410,6 +410,14 @@ if __name__ == "__main__":
     else:
         logger.info("All basic tools are registered successfully!")
     
+    # Initialize table field digest for improved LLM context
+    logger.info("Initializing table field digest for improved LLM context...")
+    try:
+        tools_loader.run_digest_initialization()
+        logger.info("Table field digest initialization complete")
+    except Exception as e:
+        logger.warning(f"Table field digest initialization failed, but server will continue: {e}")
+    
     # Get host and port
     HOST = os.environ.get("DB_HOST", "127.0.0.1")
     PORT = int(os.environ.get("DB_PORT", "8000"))
