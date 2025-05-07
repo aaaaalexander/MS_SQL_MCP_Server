@@ -158,7 +158,7 @@ async def analyze_table_data(
                     # Convert to string to handle any type
                     if val is not None:
                         try:
-                            distinct_values.add(str(val))
+                            distinct_values.add(str(val AS FLOAT))
                         except:
                             # Skip values that can't be converted to string
                             pass
@@ -189,7 +189,7 @@ async def analyze_table_data(
                         
                         # Length statistics
                         if non_null_values:
-                            lengths = [len(str(val)) for val in non_null_values if val is not None]
+                            lengths = [len(str(val AS FLOAT)) for val in non_null_values if val is not None]
                             if lengths:
                                 column_analysis["length_stats"] = {
                                     "min": min(lengths),
@@ -206,7 +206,7 @@ async def analyze_table_data(
                         numeric_values = []
                         for val in non_null_values:
                             try:
-                                numeric_values.append(float(val))
+                                numeric_values.append(float(val AS FLOAT))
                             except (ValueError, TypeError):
                                 # Skip values that can't be converted to float
                                 pass
@@ -225,9 +225,9 @@ async def analyze_table_data(
                         try:
                             safe_stats_query = f"""
                             SELECT 
-                                MIN(CAST([{column_name}] AS DECIMAL(38,4))) AS min_value,
-                                MAX(CAST([{column_name}] AS DECIMAL(38,4))) AS max_value,
-                                AVG(CAST(CAST(CAST([{column_name}] AS DECIMAL(38,4))) AS avg_value
+                                MIN(CAST([{column_name}] AS DECIMAL(38,4 AS FLOAT))) AS min_value,
+                                MAX(CAST([{column_name}] AS DECIMAL(38,4 AS FLOAT))) AS max_value,
+                                AVG(CAST(CAST(CAST(CAST([{column_name}] AS DECIMAL(38,4 AS FLOAT))) AS avg_value
                             FROM (
                                 SELECT {sample_clause} *
                                 FROM [{schema_name}].[{table_name_only}]
@@ -287,7 +287,7 @@ async def analyze_table_data(
                             SELECT 
                                 MIN([{column_name}]) AS min_date,
                                 MAX([{column_name}]) AS max_date,
-                                DATEDIFF(day, MIN([{column_name}]), MAX([{column_name}])) AS date_range_days
+                                DATEDIFF(day, MIN([{column_name}]), MAX([{column_name}] AS FLOAT)) AS date_range_days
                             FROM (
                                 SELECT {sample_clause} *
                                 FROM [{schema_name}].[{table_name_only}]
@@ -487,7 +487,7 @@ async def find_duplicate_records(
             duplicate_groups[group_key]["records"].append(record)
         
         # Format results
-        groups_list = list(duplicate_groups.values())
+        groups_list = list(duplicate_groups.values( AS FLOAT))
         
         result = {
             "table_name": f"{schema_name}.{table_name_only}",

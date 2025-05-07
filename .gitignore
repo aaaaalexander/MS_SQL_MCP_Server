@@ -81,6 +81,34 @@ test_*.py
 test_*.bat
 tests/
 **/tests/
+quick_test.py
+quick_tool_test.py
+test_tools.py
+test_fix_tools.py
+test_db_connection.py
+test_all_mcp_tools.bat
+scripts/test/
+scripts/testing/
+
+# Debugging and fix files
+fix_*.py
+*_fix.py
+fix_analyze.py
+fix_db_connection.py
+fix_sql_mcp_tools.py
+simple_fix.py
+run_direct.py
+simple_server.py
+
+# Development documentation
+CHECKLIST.md
+IMPLEMENTATION_REVIEW.md
+NEXT_STEPS.md
+TEST_SUMMARY.md
+*_test_results.json
+*_validation_report.md
+sql_mcp_test_results.json
+sql_mcp_validation_report.md
 
 # Documentation files (excluding essential ones)
 ADAPTER_FIX.md
